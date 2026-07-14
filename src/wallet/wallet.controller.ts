@@ -5,6 +5,7 @@ import { CreateWithdrawalDto } from './dto/create-withdrawal.dto';
 import { UserRole } from 'src/users/user-role.enum';
 import { Roles } from 'src/auth/roles.decorator';
 import { WithdrawalStatus } from './entities/withdrawal.entity';
+import { RolesGuard } from 'src/auth/roles.guard';
 
 @Controller('wallet')
 @UseGuards(JwtAuthGuard)
@@ -27,6 +28,7 @@ export class WalletController {
   }
 
   @Get('admin/withdrawals')
+  @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN) // Only Admins can see this
   async getAllWithdrawals(@Query('status') status?: WithdrawalStatus) {
     return this.walletService.findAllWithdrawals(status);
@@ -34,6 +36,7 @@ export class WalletController {
 
   // POST: Trigger the Paystack transfer and approve the withdrawal
   @Post('admin/withdrawals/:id/approve')
+  @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   async approveWithdrawal(@Param('id') id: string) {
     

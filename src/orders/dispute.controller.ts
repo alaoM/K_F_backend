@@ -22,7 +22,7 @@ export class DisputeController {
       data: this.disputeService.initiate(orderId, req.user.sub, dto),
     }
   }
-ƒ
+
   @Get('my-disputes')
   findAll(@Req() req) {
     return this.disputeService.findMyDisputes(req.user.sub, req.user.role);

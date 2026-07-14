@@ -53,8 +53,6 @@ export class OrdersController {
 
   // 3. Seller Dashboard: Get all orders for my store
   @Get('seller/sales')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
   async getSellerOrders(@Req() req) {
 
 

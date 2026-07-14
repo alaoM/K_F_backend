@@ -39,37 +39,32 @@ export class ProductController {
   /* ================= SELLER ================= */
 
   @Get('seller')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   getMyProducts(@Req() req, @Query() filters: ProductFilterDto) {
 
     return this.productsService.findAllBySeller(req.user.sub, filters);
   }
 
   @Get('seller/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   getMyProduct(@Req() req, @Param('id') id: string) {
     return this.productsService.findOneBySeller(req.user.sub, id);
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   create(@Req() req, @Body() dto: CreateProductDto) {
     return this.productsService.create(req.user.sub, dto);
   }
 
   @Post('bulk')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   bulkCreate(@Req() req, @Body() dtos: CreateProductDto[]) {
     return this.productsService.bulkCreate(req.user.sub, dtos);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   update(
     @Req() req,
     @Param('id') id: string,
@@ -80,8 +75,7 @@ export class ProductController {
 
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   remove(@Req() req, @Param('id') id: string) {
     return this.productsService.delete(req.user.sub, id);
   }

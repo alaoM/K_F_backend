@@ -190,7 +190,7 @@ export class DisputeService {
       item => item.seller?.user?.id === userId
     );
 
-    if (role !== 'Admin' && !isBuyer && !isSeller) {
+    if (role !== UserRole.ADMIN && !isBuyer && !isSeller) {
       throw new ForbiddenException('Access denied');
     }
     return this.sanitizeDispute(dispute);

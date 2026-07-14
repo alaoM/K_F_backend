@@ -48,8 +48,6 @@ async getAnalytics(@Req() req: any) {
   }
 
   /* ---------------- GET MY STORE ---------------- */
-  @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.ADMIN)
   @Get('me')
   getMyStore(@Req() req) {
     return this.sellerService.getMyStore(req.user.sub);
@@ -88,8 +86,6 @@ async getAnalytics(@Req() req: any) {
   }
 
   /* ---------------- SELLER: BANK ---------------- */
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.SELLER)
   @Post('banks')
   async addBank(
      @Req() req: any,
