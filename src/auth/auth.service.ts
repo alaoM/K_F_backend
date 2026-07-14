@@ -296,7 +296,7 @@ private async findUserByVerificationToken(token: string) {
   async refresh(refreshToken: string) {
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
-        secret: this.config.get('JWT_REFRESH_SECRET'),
+        secret: this.config.get('JWT_REFRESH_SECRET') || this.config.get('JWT_SECRET'),
       });
 
       const user = await this.usersService.findForAuth({ email: payload.email });
@@ -495,11 +495,11 @@ async authenticate2FA(userId: string, code: string) {
 
     const [at, rt] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.config.get('JWT_ACCESS_SECRET'),
+        secret: this.config.get('JWT_ACCESS_SECRET') || this.config.get('JWT_SECRET'),
         expiresIn: '1d',
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.config.get('JWT_REFRESH_SECRET'),
+        secret: this.config.get('JWT_REFRESH_SECRET') || this.config.get('JWT_SECRET'),
         expiresIn: '7d',
       }),
     ]);
