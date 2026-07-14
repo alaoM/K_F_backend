@@ -70,11 +70,11 @@ export class MailserviceService {
 
     async sendShippingNotification(order: any, title: string) {
         await this.mailService.sendMail({
-            to: order.email,
+            to: order.buyer?.email,
             subject: `Your order - ${title} has been shipped`,
             template: 'order-shipped',  
             context: {
-                name: order.fullName,
+                name: order.buyer?.fullName || 'Customer',
                 title: title,
             },
         });
@@ -82,11 +82,11 @@ export class MailserviceService {
 
     async sendDeliveryNotification(order: any, title: string) {
         await this.mailService.sendMail({
-            to: order.email,
+            to: order.buyer?.email,
             subject: `Your order - ${title} has been delivered`,
-            template: 'order-delivered', // Corresponds to 2fa-code.hbs
+            template: 'order-delivered', // Corresponds to order-delivered.hbs
             context: {
-                name: order.fullName,
+                name: order.buyer?.fullName || 'Customer',
                 title: title,
             },
         });
@@ -102,7 +102,7 @@ export class MailserviceService {
             template: 'seller-approval', // Points to seller-approval.hbs
             context: {
                 name: name,
-                loginUrl: `${process.env.FRONTEND_URL}/auth/login`,
+                loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
             },
         }); 
       
@@ -119,7 +119,7 @@ export class MailserviceService {
             context: {
                 name: name,
                 reason: reason, // The reason passed from the Admin UI
-                onboardingUrl: `${process.env.FRONTEND_URL}/auth/onboarding`,
+                onboardingUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/become-a-seller`,
             },
         }); 
        

@@ -379,12 +379,12 @@ private async findUserByVerificationToken(token: string) {
       hashedToken,
       new Date(Date.now() + 15 * 60 * 1000),
     );
-
     try {
-      const url = `${process.env.FRONTEND_URL}/reset-password?q=${resetToken}` || 'http://localhost:3000';
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const url = `${baseUrl}/reset-password?q=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
-      console.log(url)
-      await this.mailService.sendPasswordReset(user.email, url);
+      console.log(url);
+      await this.mailService.sendPasswordReset(user, url);
       this.logger.log(`Password reset email sent to: ${email}`);
     } catch (e) {
       this.logger.error(`Failed to send password reset email to ${email}`, e.stack);

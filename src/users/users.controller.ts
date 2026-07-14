@@ -125,8 +125,11 @@ async getMe(@Req() req: any) {
 
   @Patch(':id/reject')
   @Roles(UserRole.ADMIN)
-  async reject(@Param('id') id: string, @Req() req: any) {
-    return this.usersService.rejectVerification(id, req.user.sub);
+  async reject(
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.usersService.rejectVerification(id, reason);
   }
 
   @Get(':id')
