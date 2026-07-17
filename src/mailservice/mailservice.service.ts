@@ -16,8 +16,9 @@ export class MailserviceService {
 
   constructor(private readonly config: ConfigService) {
     this.apiUrl = this.config.get<string>('ZEPTOMAIL_API_URL') ?? 'https://api.zeptomail.com/v1.1/email';
-    this.apiKey = this.config.get<string>('ZEPTOMAIL_API_KEY') ?? '';
-    this.fromAddress = this.config.get<string>('MAIL_FROM') ?? 'donotreply@fkstores.com';
+    // .trim() guards against dotenv including surrounding whitespace or newlines
+    this.apiKey = (this.config.get<string>('ZEPTOMAIL_API_KEY') ?? '').trim();
+    this.fromAddress = (this.config.get<string>('MAIL_FROM') ?? 'donotreply@fkstores.com').trim();
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
@@ -64,13 +65,19 @@ export class MailserviceService {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: this.apiKey, // e.g. "Zoho-enczapikey ..."
+          // ZeptoMail expects the full string: "Zoho-enczapikey <token>"
+          Authorization: this.apiKey,
         },
       });
       this.logger.log(`Email sent to ${params.to} — "${params.subject}"`);
     } catch (error: any) {
+      // Log the full ZeptoMail response body for easier diagnosis
+      const status = error?.response?.status;
+      const body = error?.response?.data;
       this.logger.error(
-        `Failed to send email to ${params.to}: ${error?.response?.data?.message ?? error.message}`,
+        `Failed to send email to ${params.to} | ` +
+        `Status: ${status ?? 'N/A'} | ` +
+        `Body: ${JSON.stringify(body) ?? error.message}`,
       );
       throw error;
     }
