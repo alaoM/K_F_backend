@@ -36,7 +36,7 @@ export class AnalyticsService {
 
         return {
             gmv: parseFloat(orderStats.gmv || 0),
-            revenue: parseFloat(orderStats.revenue || 0), // This is Bleefy's actual profit
+            revenue: parseFloat(orderStats.revenue || 0), // This is FKstores' actual profit
             totalOrders: parseInt(orderStats.count || 0),
             users: {
                 sellers: totalSellers,

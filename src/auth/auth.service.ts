@@ -427,7 +427,7 @@ private async findUserByVerificationToken(token: string) {
     await this.usersService.update2FASecret(userId, secret, false);
     this.logger.log(`MFA initiation started for user: ${user.email}`);
 
-    const appName = this.config.get('APP_NAME') || 'Bleefy';
+    const appName = this.config.get('APP_NAME') || 'FKstores';
     return {
       otpauthUrl: authenticator.keyuri(user.email, appName, secret),
       secret,

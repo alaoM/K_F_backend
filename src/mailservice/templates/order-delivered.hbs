@@ -1,11 +1,86 @@
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px;">
-  <h2 style="color: #2e7d32;">Delivered</h2>
-  <p>Hello, {{name}}</p>
-  <p>Good news! Your order for <strong>{{title}}</strong> has been delivered successfully.</p>
-  <div style="background: #f4f4f4; padding: 20px; text-align: center; font-size: 18px; font-weight: bold; color: #333;">
-    Enjoy your purchase!
-  </div>
-  <p>If you have any issues with your order, please raise a dispute in your dashboard.</p>
-  <hr style="border: none; border-top: 1px solid #eee;" />
-  <p style="font-size: 12px; color: #888;">Bleef Inc, 123 Farm Road, Nigeria.</p>
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Order Has Been Delivered — FKstores</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f8;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f8;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;max-width:600px;width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#243e6b 0%,#1a2b4a 100%);padding:36px 40px;text-align:center;">
+              <h1 style="margin:0;font-size:30px;font-weight:900;color:#f6c947;">FKstores</h1>
+              <p style="margin:4px 0 0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:4px;">fkstores.com</p>
+            </td>
+          </tr>
+          <tr><td style="height:4px;background:#f6c947;"></td></tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+
+              <!-- Icon -->
+              <div style="text-align:center;margin-bottom:24px;">
+                <span style="font-size:48px;">🎉</span>
+              </div>
+
+              <h2 style="margin:0 0 6px;font-size:22px;font-weight:900;color:#243e6b;text-align:center;">Order Delivered Successfully!</h2>
+              <p style="margin:0 0 28px;font-size:13px;color:#6b7280;text-align:center;">Enjoy your new fashion piece!</p>
+
+              <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 16px;">
+                Hello <strong style="color:#243e6b;">{{name}}</strong>,
+              </p>
+
+              <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 24px;">
+                Your order has been delivered! We hope you love your new purchase from FKstores.
+              </p>
+
+              <!-- Order Info Box -->
+              <div style="background:linear-gradient(135deg,#243e6b 0%,#1a2b4a 100%);border-radius:12px;padding:24px;margin:0 0 28px;text-align:center;">
+                <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:3px;">Delivered</p>
+                <p style="margin:0;font-size:20px;font-weight:900;color:#f6c947;">{{title}}</p>
+              </div>
+
+              <!-- Rate / Dispute -->
+              <div style="background-color:#f9fafb;border-radius:12px;padding:20px;margin:0 0 24px;border:1px solid #e5e7eb;">
+                <p style="margin:0 0 8px;font-size:14px;color:#374151;">
+                  ⭐ <strong>Love your order?</strong> Leave a review on your dashboard to help other shoppers!
+                </p>
+                <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
+                  If there's an issue with your order, you can raise a dispute directly from your account dashboard within 7 days.
+                </p>
+              </div>
+
+              <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0;">
+                Need help? Reach us at <a href="mailto:support@fkstores.com" style="color:#243e6b;">support@fkstores.com</a> — we're always happy to assist.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f9fafb;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+              <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">
+                © {{year}} FKstores — Golden Shopping Experience.
+              </p>
+              <p style="margin:0;font-size:12px;">
+                <a href="https://fkstores.com" style="color:#243e6b;text-decoration:none;">fkstores.com</a>
+                &nbsp;·&nbsp;
+                <a href="mailto:support@fkstores.com" style="color:#243e6b;text-decoration:none;">Support</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
