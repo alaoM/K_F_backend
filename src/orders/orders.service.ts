@@ -310,51 +310,64 @@ export class OrdersService {
 
   // 2. The "Confirm Delivery" logic (The Escrow Trigger)
   async confirmDelivery(orderId: string, userId: string) {
-    const order = await this.orderRepo.findOne({
-      where: { id: orderId, buyer: { id: userId } },
-      relations: ['items', 'items.seller', 'items.seller.user', 'buyer'],
+    return this.dataSource.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const userRepo = manager.getRepository(User);
+
+      const order = await orderRepo.findOne({
+        where: { id: orderId, buyer: { id: userId } },
+        relations: ['items', 'items.seller', 'items.seller.user', 'buyer'],
+      });
+
+      if (!order) throw new NotFoundException('Order not found');
+
+      if (order.paymentStatus !== 'escrow_held') {
+        throw new BadRequestException('Payment is not in Escrow. Cannot release funds.');
+      }
+
+      if (order.items.some(i => i.fulfillmentStatus !== FulfillmentStatus.SHIPPED)) {
+        throw new BadRequestException('Not all items have been shipped yet');
+      }
+
+      if (order.status === OrderStatus.DELIVERED) {
+        throw new BadRequestException('Order already completed');
+      }
+
+      // Move money from Pending -> Available
+      for (const item of order.items) {
+        const itemTotal = Number(item.priceAtPurchase) * item.quantity;
+        const rate = item.commissionRate != null
+          ? Number(item.commissionRate)
+          : await this.settingsService.getNumber('COMMISSION_PERCENT', 0.05);
+
+        const sellerNet = itemTotal * (1 - rate);
+
+        if (item.seller?.user?.id) {
+          await userRepo.update(item.seller.user.id, {
+            lifetimeSalesVolume: () => `lifetimeSalesVolume + ${itemTotal}`
+          });
+        }
+
+        if (item.seller?.id) {
+          await this.walletService.releaseEscrow(item.seller.id, sellerNet, order.id, manager);
+        }
+      }
+
+      order.status = OrderStatus.DELIVERED;
+      order.paymentStatus = 'released';
+
+      const savedOrder = await orderRepo.save(order);
+
+      // Trigger Email Notification
+      try {
+        await this.mailService.sendDeliveryNotification(order, order.items[0]?.productSnapshotTitle || 'purchased items');
+      } catch (mailErr) {
+        // Log mail error, do not fail transaction
+        console.error('Failed to send delivery email:', mailErr);
+      }
+
+      return savedOrder;
     });
-
-    if (!order) throw new NotFoundException('Order not found');
-
-    if (order.paymentStatus !== 'escrow_held') {
-      throw new BadRequestException('Payment is not in Escrow. Cannot release funds.');
-    }
-
-    if (order.items.some(i => i.fulfillmentStatus !== FulfillmentStatus.SHIPPED)) {
-      throw new BadRequestException('Not all items have been shipped yet');
-    }
-
-    if (order.status === OrderStatus.DELIVERED) {
-      throw new BadRequestException('Order already completed');
-    }
-
-
-
-    // Move money from Pending -> Available
-    for (const item of order.items) {
-      const itemTotal = Number(item.priceAtPurchase) * item.quantity; // ✅ declare it
-      const rate = item.commissionRate != null
-        ? Number(item.commissionRate)
-        : await this.settingsService.getNumber('COMMISSION_PERCENT', 0.05); // ✅ safe fallback
-
-      const sellerNet = itemTotal * (1 - rate);
-
-      if (item.seller?.user?.id) {
-        await this.userRepo.update(item.seller.user.id, {
-          lifetimeSalesVolume: () => `lifetimeSalesVolume + ${itemTotal}`
-        });
-      }
-
-      if (item.seller?.id) {
-        await this.walletService.releaseEscrow(item.seller.id, sellerNet, order.id);
-      }
-    }
-
-    order.status = OrderStatus.DELIVERED;
-    order.paymentStatus = 'released';
-
-    return await this.orderRepo.save(order);
   }
 
   //  - single source of truth for wallet logic
@@ -462,6 +475,37 @@ export class OrdersService {
     dispute.adminResolutionNote = adminNote;
     await this.orderRepo.save(dispute.order);
     return await this.disputeRepo.save(dispute);
+  }
+
+  /* --- For Admin: View All Sales Across All Sellers --- */
+  async findAllSales() {
+    return this.dataSource.getRepository(OrderItem).find({
+      relations: ['order', 'product', 'order.buyer', 'seller'],
+      withDeleted: true,
+      select: {
+        order: {
+          id: true,
+          shippingAddress: true,
+          totalAmount: true,
+          status: true,
+          paymentStatus: true,
+          createdAt: true,
+          buyer: {
+            id: true,
+            fullName: true,
+            email: true,
+            phoneNumber: true,
+            userAvatar: true,
+          },
+        },
+        seller: {
+          id: true,
+          businessName: true,
+          storeSlug: true,
+        },
+      },
+      order: { order: { createdAt: 'DESC' } },
+    });
   }
 
 }

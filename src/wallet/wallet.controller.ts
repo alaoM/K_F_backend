@@ -13,16 +13,22 @@ export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
   @Get('balance')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SELLER)
   async getBalance(@Req() req) {
     return this.walletService.getWalletData(req.user.id);
   }
 
   @Get('transactions')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SELLER)
   async getTransactions(@Req() req) {
     return this.walletService.getTransactions(req.user.id);
   }
 
   @Post('withdraw')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SELLER)
   async withdraw(@Req() req, @Body() dto: CreateWithdrawalDto) {
     return this.walletService.requestWithdrawal(req.user.id, dto);
   }

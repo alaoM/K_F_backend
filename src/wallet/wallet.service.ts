@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
 import { Transaction, TransactionType } from './entities/transaction.entity';
 import { Withdrawal, WithdrawalStatus } from './entities/withdrawal.entity';
@@ -11,6 +11,8 @@ import { PaymentMethod } from 'src/orders/entities/order.entity';
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     @InjectRepository(Wallet) private walletRepo: Repository<Wallet>,
     @InjectRepository(Transaction) private txRepo: Repository<Transaction>,
@@ -81,15 +83,18 @@ export class WalletService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
-
     try {
       // Atomic debit — prevents race conditions
-      await queryRunner.manager
+      const updateResult = await queryRunner.manager
         .createQueryBuilder()
         .update(Wallet)
         .set({ availableBalance: () => `availableBalance - ${amount}` })
         .where('id = :id AND availableBalance >= :amount', { id: wallet.id, amount })
         .execute();
+
+      if (!updateResult.affected || updateResult.affected === 0) {
+        throw new BadRequestException('Insufficient balance or concurrent withdrawal request.');
+      }
 
       // ✅ Save gateway method on the withdrawal record
       const withdrawal = await queryRunner.manager.save(Withdrawal, {
@@ -134,20 +139,23 @@ export class WalletService {
     return await this.txRepo.save(newTransaction);
   }
 
-  async releaseEscrow(sellerId: string, amount: number, orderId: string) {
-    const wallet = await this.getOrCreateWallet(sellerId);
+  async releaseEscrow(sellerId: string, amount: number, orderId: string, manager?: EntityManager) {
+    const wallet = await this.getOrCreateWallet(sellerId, manager);
 
     if (Number(wallet.pendingBalance) < amount) {
       throw new BadRequestException('Insufficient pending funds to release');
     }
 
-    await this.walletRepo.decrement({ id: wallet.id }, 'pendingBalance', amount);
-    await this.walletRepo.increment({ id: wallet.id }, 'availableBalance', amount);
+    const walletRepo = manager ? manager.getRepository(Wallet) : this.walletRepo;
+    const txRepo = manager ? manager.getRepository(Transaction) : this.txRepo;
 
-    const transaction = await this.txRepo.findOneBy({ reference: orderId });
+    await walletRepo.decrement({ id: wallet.id }, 'pendingBalance', amount);
+    await walletRepo.increment({ id: wallet.id }, 'availableBalance', amount);
+
+    const transaction = await txRepo.findOneBy({ reference: orderId });
     if (transaction) {
       transaction.status = 'completed';
-      await this.txRepo.save(transaction);
+      await txRepo.save(transaction);
     }
   }
 
@@ -173,10 +181,9 @@ export class WalletService {
       : withdrawal.bankAccount.paystackRecipientCode;
 
     if (!recipientCode) {
-      withdrawal.status = WithdrawalStatus.FAILED;
-      await this.withdrawalRepo.save(withdrawal);
+      await this.refundFailedWithdrawal(withdrawal);
       throw new BadRequestException(
-        `No ${withdrawal.paymentMethod} recipient code found for this bank account`
+        `No ${withdrawal.paymentMethod} recipient code found for this bank account. Seller wallet has been refunded.`
       );
     }
 
@@ -199,20 +206,55 @@ export class WalletService {
 
       return { success: true, transferCode: withdrawal.gatewayTransferCode };
     } catch (error) {
-      withdrawal.status = WithdrawalStatus.FAILED;
-      await this.withdrawalRepo.save(withdrawal);
-      throw new BadRequestException('Transfer failed: ' + error.message);
+      await this.refundFailedWithdrawal(withdrawal);
+      throw new BadRequestException('Transfer failed: ' + error.message + '. Seller wallet has been refunded.');
     }
   }
 
-  private async getOrCreateWallet(sellerId: string) {
-    let wallet = await this.walletRepo.findOne({
+  private async refundFailedWithdrawal(withdrawal: Withdrawal) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      withdrawal.status = WithdrawalStatus.FAILED;
+      await queryRunner.manager.save(Withdrawal, withdrawal);
+
+      // Refund the available balance back
+      await queryRunner.manager.increment(
+        Wallet,
+        { seller: { id: withdrawal.seller.id } },
+        'availableBalance',
+        withdrawal.amount
+      );
+
+      // Set the transaction status to failed
+      await queryRunner.manager.update(
+        Transaction,
+        { reference: withdrawal.id },
+        { status: 'failed' }
+      );
+
+      await queryRunner.commitTransaction();
+      this.logger.log(`Refunded withdrawal ${withdrawal.id} successfully.`);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to refund wallet for failed withdrawal ${withdrawal.id}: ${err.message}`, err.stack);
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  private async getOrCreateWallet(sellerId: string, manager?: EntityManager) {
+    const walletRepo = manager ? manager.getRepository(Wallet) : this.walletRepo;
+
+    let wallet = await walletRepo.findOne({
       where: { seller: { id: sellerId } },
     });
 
     if (!wallet) {
-      wallet = await this.walletRepo.save(
-        this.walletRepo.create({
+      wallet = await walletRepo.save(
+        walletRepo.create({
           seller: { id: sellerId } as any,
           availableBalance: 0,
           pendingBalance: 0,

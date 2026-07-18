@@ -59,4 +59,12 @@ export class OrdersController {
     const sellerId = req.user.sub;
     return this.ordersService.findSalesBySeller(sellerId);
   }
+
+  // 4. Admin: Get ALL sales across all sellers
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get('admin/all')
+  async getAllOrders() {
+    return this.ordersService.findAllSales();
+  }
 }

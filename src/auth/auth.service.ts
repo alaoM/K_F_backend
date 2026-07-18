@@ -491,7 +491,7 @@ async authenticate2FA(userId: string, code: string) {
    * Issue JWT Access and Refresh Tokens
    */
   private async issueTokens(user: any) {
-    const payload = { sub: user.id, id: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, id: user.id, email: user.email, role: user.role, isVerified: user.isVerified };
 
     const [at, rt] = await Promise.all([
       this.jwtService.signAsync(payload, {

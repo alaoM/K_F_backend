@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Dispute, DisputeStatus } from "./entities/dispute.entity";
-import { Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { DisputeMessage } from "./entities/dispute-messages";
 import { Order } from "./entities/order.entity";
 import { WalletService } from "src/wallet/wallet.service";
@@ -19,6 +19,7 @@ export class DisputeService {
     @InjectRepository(Order) private orderRepo: Repository<Order>,
     private walletService: WalletService,
     private mailService: MailserviceService,
+    private dataSource: DataSource,
   ) { }
 
   // 1. INITIATE (Buyer)
@@ -118,33 +119,38 @@ export class DisputeService {
 
   // 4. ADMIN RESOLVE
   async resolve(disputeId: string, dto: ResolveDisputeDto) {
-    const dispute = await this.disputeRepo.findOne({
-      where: { id: disputeId },
-      relations: ['order', 'order.items', 'order.items.seller']
-    });
+    return this.dataSource.transaction(async (manager) => {
+      const disputeRepo = manager.getRepository(Dispute);
+      const orderRepo = manager.getRepository(Order);
 
-    if (!dispute) throw new NotFoundException('Dispute not found');
+      const dispute = await disputeRepo.findOne({
+        where: { id: disputeId },
+        relations: ['order', 'order.items', 'order.items.seller']
+      });
 
-    if (dto.action === 'release') {
-      for (const item of dispute.order.items) {
-        const itemTotal = Number(item.priceAtPurchase) * item.quantity;
-        const rate = item.commissionRate != null
-          ? Number(item.commissionRate)
-          : 0.05; // safe fallback
-        const sellerNet = itemTotal * (1 - rate);
-        await this.walletService.releaseEscrow(item.seller.id, sellerNet, dispute.order.id);
+      if (!dispute) throw new NotFoundException('Dispute not found');
+
+      if (dto.action === 'release') {
+        for (const item of dispute.order.items) {
+          const itemTotal = Number(item.priceAtPurchase) * item.quantity;
+          const rate = item.commissionRate != null
+            ? Number(item.commissionRate)
+            : 0.05; // safe fallback
+          const sellerNet = itemTotal * (1 - rate);
+          await this.walletService.releaseEscrow(item.seller.id, sellerNet, dispute.order.id, manager);
+        }
+        dispute.status = DisputeStatus.RESOLVED_RELEASED;
+        dispute.order.status = OrderStatus.DELIVERED;
+      } else {
+        dispute.status = DisputeStatus.RESOLVED_REFUNDED;
+        dispute.order.status = 'refunded' as any;
+        dispute.order.paymentStatus = 'refunded';
       }
-      dispute.status = DisputeStatus.RESOLVED_RELEASED;
-      dispute.order.status = OrderStatus.DELIVERED;
-    } else {
-      dispute.status = DisputeStatus.RESOLVED_REFUNDED;
-      dispute.order.status = 'refunded' as any;
-      dispute.order.paymentStatus = 'refunded';
-    }
 
-    dispute.adminResolutionNote = dto.note;
-    await this.orderRepo.save(dispute.order);
-    return this.disputeRepo.save(dispute);
+      dispute.adminResolutionNote = dto.note;
+      await orderRepo.save(dispute.order);
+      return await disputeRepo.save(dispute);
+    });
   }
 
   // 5. FETCHING
