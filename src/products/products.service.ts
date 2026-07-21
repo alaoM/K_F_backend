@@ -56,13 +56,14 @@ export class ProductsService {
     }
 
     if (filters.category) {
-      qb.andWhere('product.categoryId = :category', {
+      qb.leftJoin('product.category', 'catRelation');
+      qb.andWhere('(product.categoryId = :category OR LOWER(catRelation.name) = LOWER(:category))', {
         category: filters.category,
       });
     }
 
     if (filters.search) {
-      qb.andWhere('product.name LIKE :search', {
+      qb.andWhere('(LOWER(product.title) LIKE LOWER(:search) OR LOWER(product.description) LIKE LOWER(:search))', {
         search: `%${filters.search}%`,
       });
     }
