@@ -1,16 +1,20 @@
-import { IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength, ValidateIf } from "class-validator";
+import { IsArray, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength, ValidateIf } from "class-validator";
 
 export class CreateCategoryDto {
 
-
   @IsString()
-  @MinLength(2, { message: 'Category name is too short. Minimum 3 characters.' })
+  @MinLength(2, { message: 'Category name is too short. Minimum 2 characters.' })
   name: string;
 
   @IsOptional()
   @ValidateIf((o) => o.parentId !== '' && o.parentId !== null)
   @IsUUID()
   parentId?: string; // If creating a sub-category
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  subcategories?: string[]; // Multiple sub-categories to create in bulk
 
   @IsOptional()
   @IsString()
@@ -27,3 +31,4 @@ export class CreateCategoryDto {
   commissionPercent?: number; // 0.08 = 8%, null = use global
 
 }
+
