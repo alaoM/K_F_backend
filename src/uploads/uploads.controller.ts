@@ -17,15 +17,17 @@ import { imageUploadConfig } from './uploads.multer.config';
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
+
+
   private getFileUrl(filename: string): string {
     const assetsUrl = process.env.ASSETS_URL;
+
+
     if (assetsUrl) {
       const cleanBase = assetsUrl.replace(/\/$/, '');
-      if (cleanBase.endsWith('/uploads')) {
-        return `${cleanBase}/${filename}`;
-      }
-      return `${cleanBase}/uploads/${filename}`;
+      return `${cleanBase}/${filename}`;
     }
+
     const appUrl = (process.env.APP_URL || 'http://localhost:4002').replace(/\/$/, '');
     return `${appUrl}/uploads/${filename}`;
   }
