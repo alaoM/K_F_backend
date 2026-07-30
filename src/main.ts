@@ -26,8 +26,11 @@ async function bootstrap() {
   await seedSystemSettings(dataSource);
 
   // 3. Serve Static Assets (The Uploads Folder)
-  // This makes: http://localhost:4002/uploads/your-image.jpg accessible
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  const staticUploadPath = process.env.UPLOAD_DESTINATION
+    ? join(process.env.UPLOAD_DESTINATION)
+    : join(__dirname, '..', 'uploads');
+
+  app.useStaticAssets(staticUploadPath, {
     prefix: '/uploads/',
   });
 

@@ -1,20 +1,25 @@
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, resolve } from 'path';
 import { BadRequestException } from '@nestjs/common';
-import * as fs from 'fs'; // <-- Added to handle folder creation
-
-const UPLOAD_PATH = process.env.UPLOAD_DESTINATION || './uploads';
-
-console.log("UPLOAD_PATH", process.env.UPLOAD_DESTINATION)
-
-// Safely create the folder if it doesn't exist (prevents crashes on new environments)
-if (!fs.existsSync(UPLOAD_PATH)) {
-  fs.mkdirSync(UPLOAD_PATH, { recursive: true });
-}
+import * as fs from 'fs';
 
 export const imageUploadConfig = {
   storage: diskStorage({
-    destination: UPLOAD_PATH,
+    destination: (req, file, cb) => {
+      const uploadPath = process.env.UPLOAD_DESTINATION 
+        ? resolve(process.env.UPLOAD_DESTINATION)
+        : resolve('./uploads');
+
+      // Safely ensure upload directory exists at request time
+      if (!fs.existsSync(uploadPath)) {
+        try {
+          fs.mkdirSync(uploadPath, { recursive: true });
+        } catch (err: any) {
+          return cb(new BadRequestException(`Failed to create upload directory: ${err.message}`), '');
+        }
+      }
+      cb(null, uploadPath);
+    },
     filename: (req, file, cb) => {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
       const ext = extname(file.originalname).toLowerCase();
@@ -22,8 +27,8 @@ export const imageUploadConfig = {
     },
   }),
   fileFilter: (req, file, cb) => {
-    // SECURITY CHECK: Match the actual mimetype, not just the file name extension
-    if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+    // SECURITY CHECK: Match image mimetype (case-insensitive)
+    if (!file.mimetype.match(/^image\/(jpg|jpeg|png|gif|webp)$/i)) {
       return cb(
         new BadRequestException('Only image files (JPG, PNG, GIF, WEBP) are allowed'),
         false,
