@@ -5,6 +5,8 @@ import * as fs from 'fs'; // <-- Added to handle folder creation
 
 const UPLOAD_PATH = process.env.UPLOAD_DESTINATION || './uploads';
 
+console.log("UPLOAD_PATH", process.env.UPLOAD_DESTINATION)
+
 // Safely create the folder if it doesn't exist (prevents crashes on new environments)
 if (!fs.existsSync(UPLOAD_PATH)) {
   fs.mkdirSync(UPLOAD_PATH, { recursive: true });
