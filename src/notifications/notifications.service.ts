@@ -6,13 +6,14 @@ import { Notification, NotificationType } from "./entities/notification.entity";
 import { User } from "../users/entities/user.entity";
 import { MailserviceService } from "../mailservice/mailservice.service";
 import { PushNotificationService } from "./push-notification.service";
-import { Subject, Observable } from "rxjs";
-import { filter } from "rxjs/operators";
+import { Subject, Observable, of, interval, merge } from "rxjs";
+import { filter, map } from "rxjs/operators";
 
 export interface SseNotificationEvent {
   userId: string;
   unreadCount: number;
   notification?: any;
+  type?: string;
 }
 
 @Injectable()
@@ -30,10 +31,18 @@ export class NotificationsService {
   ) {}
 
   getSseStream(userId: string): Observable<SseNotificationEvent> {
-    return this.sseSubject.asObservable().pipe(
+    const currentCount = this.unreadCountCache.get(userId) ?? 0;
+    const initial$ = of({ userId, unreadCount: currentCount, type: 'connected' });
+    const userEvents$ = this.sseSubject.asObservable().pipe(
       filter((event) => event.userId === userId)
     );
+    const keepAlive$ = interval(15000).pipe(
+      map(() => ({ userId, unreadCount: this.unreadCountCache.get(userId) ?? 0, type: 'ping' }))
+    );
+
+    return merge(initial$, userEvents$, keepAlive$);
   }
+
 
   async create(userId: string, title: string, message: string, type: NotificationType, link?: string) {
     // 1. Persist to DB
