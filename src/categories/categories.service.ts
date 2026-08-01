@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { IsNull, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -73,13 +73,22 @@ export class CategoriesService {
       }
     }
 
-    const slug = dto.name
+    const name = dto.name.trim();
+    const slug = name
       .toLowerCase()
       .replace(/[^\w ]+/g, '')
       .replace(/ +/g, '-');
 
+    // Pre-check duplicate name or slug to avoid 500 DB error
+    const existing = await this.repo.findOne({
+      where: [{ name }, { slug }],
+    });
+    if (existing) {
+      throw new ConflictException(`A category with the name "${name}" or slug "${slug}" already exists.`);
+    }
+
     const category = this.repo.create({
-      name: dto.name,
+      name,
       icon: dto.icon,
       image: dto.image,
       commissionPercent: dto.commissionPercent ?? null,
@@ -87,7 +96,15 @@ export class CategoriesService {
       parent: dto.parentId ? { id: dto.parentId } : null,
     });
 
-    const savedCategory = await this.repo.save(category);
+    let savedCategory: Category;
+    try {
+      savedCategory = await this.repo.save(category);
+    } catch (err: any) {
+      if (err?.code === 'ER_DUP_ENTRY' || err?.message?.includes('Duplicate entry')) {
+        throw new ConflictException(`A category with the name "${name}" already exists.`);
+      }
+      throw err;
+    }
 
     // If bulk subcategories are provided, create them under savedCategory
     if (dto.subcategories && dto.subcategories.length > 0) {
@@ -101,15 +118,28 @@ export class CategoriesService {
         const trimmed = subName.trim();
         if (!trimmed) continue;
 
-        const subSlug = `${savedCategory.slug}-${trimmed.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-')}`;
+        const baseSubSlug = `${savedCategory.slug}-${trimmed.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-')}`;
+        
+        // Check duplicate for bulk item
+        const existingSub = await this.repo.findOne({
+          where: [{ name: trimmed }, { slug: baseSubSlug }],
+        });
+
+        const subSlug = existingSub ? `${baseSubSlug}-${Date.now().toString().slice(-4)}` : baseSubSlug;
+
         const subCat = this.repo.create({
           name: trimmed,
           slug: subSlug,
           icon: dto.icon || '📁',
           parent: { id: savedCategory.id },
         });
-        const savedSub = await this.repo.save(subCat);
-        createdSubcategories.push(savedSub);
+
+        try {
+          const savedSub = await this.repo.save(subCat);
+          createdSubcategories.push(savedSub);
+        } catch {
+          // Skip individual subcategory collision gracefully
+        }
       }
       return { ...savedCategory, children: createdSubcategories };
     }
@@ -162,7 +192,19 @@ export class CategoriesService {
     }
 
     if (dto.name) {
-      category.slug = dto.name.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-');
+      const newName = dto.name.trim();
+      const newSlug = newName.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-');
+
+      const existing = await this.repo.findOne({
+        where: [{ name: newName }, { slug: newSlug }],
+      });
+
+      if (existing && existing.id !== id) {
+        throw new ConflictException(`A category with the name "${newName}" or slug "${newSlug}" already exists.`);
+      }
+
+      category.name = newName;
+      category.slug = newSlug;
     }
 
     if (dto.commissionPercent !== undefined) {
@@ -170,7 +212,15 @@ export class CategoriesService {
     }
 
     Object.assign(category, dto);
-    return await this.repo.save(category);
+
+    try {
+      return await this.repo.save(category);
+    } catch (err: any) {
+      if (err?.code === 'ER_DUP_ENTRY' || err?.message?.includes('Duplicate entry')) {
+        throw new ConflictException(`Category with this name or slug already exists.`);
+      }
+      throw err;
+    }
   }
 
   async remove(id: string) {
