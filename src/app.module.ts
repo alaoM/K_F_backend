@@ -6,7 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MailserviceModule } from './mailservice/mailservice.module';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { SellerModule } from './seller/seller.module';
 import { WalletModule } from './wallet/wallet.module';
@@ -21,15 +21,39 @@ import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlogModule } from './blog/blog.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
- 
- 
- 
- 
+
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    // 🚀 Global Cache Module (In-Memory response/data cache)
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 60000, // 60 seconds default cache TTL
+      max: 1000,  // Max 1000 items in memory
+    }),
+    // 🛡️ Rate Limiting Module (Protects server from brute-force & DDoS)
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000,  // 1 second window
+        limit: 15,  // max 15 requests/sec per IP
+      },
+      {
+        name: 'medium',
+        ttl: 10000, // 10 seconds window
+        limit: 60,  // max 60 requests per 10 secs
+      },
+      {
+        name: 'long',
+        ttl: 60000, // 60 seconds (1 minute) window
+        limit: 200, // max 200 requests per minute per IP
+      },
+    ]),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.HOST, // Your MySQL host
@@ -50,8 +74,6 @@ import { NewsletterModule } from './newsletter/newsletter.module';
       synchronize: true,
       logging: ['error', 'warn'],
       autoLoadEntities: true,
-      
-      // logging: true
     }),
     UsersModule,
     AuthModule,
@@ -72,12 +94,17 @@ import { NewsletterModule } from './newsletter/newsletter.module';
   ],
 
   controllers: [AppController],
-  providers: [AppService,
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard, // Applies global rate limiting to all routes
+    },
     {
       provide: APP_INTERCEPTOR,
-      useClass: LoggingInterceptor
+      useClass: LoggingInterceptor,
     },
-    
   ],
 })
 export class AppModule {}
+

@@ -13,15 +13,14 @@ import {
 } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { imageUploadConfig } from './uploads.multer.config';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
 
-
   private getFileUrl(filename: string): string {
     const assetsUrl = process.env.ASSETS_URL;
-
 
     if (assetsUrl) {
       const cleanBase = assetsUrl.replace(/\/$/, '');
@@ -33,6 +32,7 @@ export class UploadsController {
   }
 
   @Post('image')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // Max 10 uploads per min per IP
   @UseInterceptors(FileInterceptor('image', imageUploadConfig))
   uploadSingle(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
@@ -46,6 +46,7 @@ export class UploadsController {
   }
 
   @Post('bulk')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // Max 10 bulk upload requests per min per IP
   @UseInterceptors(
     FilesInterceptor('files', 10, imageUploadConfig),
   )

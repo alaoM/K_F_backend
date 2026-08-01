@@ -1,5 +1,6 @@
 import { Body, Controller, Post, UseGuards, ClassSerializerInterceptor, UseInterceptors, HttpCode, HttpStatus, Patch, Param, Req, ForbiddenException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { Throttle } from '@nestjs/throttler';
 
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -17,6 +18,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Max 5 registrations per min per IP
   register(@Body() dto: CreateUserDto) {
     return this.authService.register(dto);
   }
@@ -28,8 +30,6 @@ export class AuthController {
     @Body() dto: OnboardUserDto,
     @Req() req: any,
   ) {
-
-    
 
     // Ownership enforcement
     if (req.user.sub !== id) {
@@ -45,13 +45,13 @@ export class AuthController {
     return this.authService.verifyEmail(token);
   }
 
-
-
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Max 5 login attempts per min per IP (protects against brute-force)
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
   }
+
 
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
