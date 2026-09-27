@@ -4,10 +4,14 @@ import { IsNull, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { Category } from "./entities/category.entity";
+import { Product } from "src/products/entities/product.entity";
 
 @Injectable()
 export class CategoriesService {
-  constructor(@InjectRepository(Category) private repo: Repository<Category>) { }
+  constructor(
+    @InjectRepository(Category) private repo: Repository<Category>,
+    @InjectRepository(Product) private productRepo: Repository<Product>,
+  ) { }
 
   /**
    * Computes current depth level of a category (1-indexed).
@@ -223,21 +227,93 @@ export class CategoriesService {
     }
   }
 
-  async remove(id: string) {
+  /**
+   * Finds or creates the default fallback category ("Uncategorized")
+   */
+  async getOrCreateDefaultCategory(): Promise<Category> {
+    let uncategorized = await this.repo.findOne({
+      where: [{ slug: 'uncategorized' }, { name: 'Uncategorized' }],
+    });
+
+    if (!uncategorized) {
+      const created = this.repo.create({
+        name: 'Uncategorized',
+        slug: 'uncategorized',
+        icon: '📦',
+        parent: null,
+      });
+
+      try {
+        uncategorized = await this.repo.save(created);
+      } catch {
+        uncategorized = await this.repo.findOne({
+          where: [{ slug: 'uncategorized' }, { name: 'Uncategorized' }],
+        });
+      }
+    }
+
+    return uncategorized!;
+  }
+
+  /**
+   * WooCommerce pattern:
+   * - Prevents deleting default "Uncategorized" category.
+   * - Reassigns all products to targetCategory (or "Uncategorized").
+   * - Promotes sub-categories to the deleted category's parent.
+   * - Deletes the category safely without foreign key violations.
+   */
+  async remove(id: string, transferToCategoryId?: string) {
     const category = await this.repo.findOne({
       where: { id },
-      relations: ['products', 'children']
+      relations: ['parent', 'children'],
     });
 
     if (!category) throw new NotFoundException('Category not found');
 
-    if (category.products?.length > 0 || category.children?.length > 0) {
-      throw new BadRequestException(
-        'Cannot delete category that contains products or sub-categories. Move or remove them first.'
-      );
+    if (category.slug === 'uncategorized' || category.name.toLowerCase() === 'uncategorized') {
+      throw new BadRequestException('The default "Uncategorized" category cannot be deleted.');
     }
 
-    await this.repo.remove(category);
-    return { success: true };
+    if (transferToCategoryId && transferToCategoryId === id) {
+      throw new BadRequestException('Cannot transfer products to the category being deleted.');
+    }
+
+    // 1. Determine destination category for products
+    let targetCategory: Category;
+    if (transferToCategoryId) {
+      const found = await this.repo.findOne({ where: { id: transferToCategoryId } });
+      if (!found) {
+        throw new NotFoundException('Target category for product reassignment not found');
+      }
+      targetCategory = found;
+    } else {
+      targetCategory = await this.getOrCreateDefaultCategory();
+    }
+
+    // 2. Reassign all products (both active and soft-deleted)
+    await this.productRepo
+      .createQueryBuilder()
+      .update(Product)
+      .set({ categoryId: targetCategory.id })
+      .where('categoryId = :id', { id })
+      .execute();
+
+    // 3. Promote sub-categories to this category's parent (or top-level if parent is null)
+    if (category.children && category.children.length > 0) {
+      const newParentId = category.parent?.id || null;
+      for (const child of category.children) {
+        await this.repo.update(child.id, {
+          parent: newParentId ? ({ id: newParentId } as Category) : null,
+        });
+      }
+    }
+
+    // 4. Safely remove the category
+    await this.repo.delete(id);
+
+    return {
+      success: true,
+      message: `Category "${category.name}" deleted. Products were reassigned to "${targetCategory.name}".`,
+    };
   }
 }

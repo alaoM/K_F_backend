@@ -20,12 +20,7 @@ export class DiscoveryController {
         limit || 8, 
         excludeId
     );
-    console.log('Personalized Feed for User:', {
-      userId,
-      limit: limit || 8,
-      excludeId,
-        });
-
+    
     return {
       success: true,
       data: products

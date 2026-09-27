@@ -320,7 +320,6 @@ export class ProductsService {
     }
 
     // 4. Admin fallback → create seller profile ONCE
-    console.log(user, 'is admin but has no seller profile, creating one...');
     const newSeller = this.sellerRepo.create({
       user: { id: userId },
       businessName: `${user.fullName}'s Store`,

@@ -20,9 +20,13 @@ import { PaymentGatewayFactory } from 'src/payment-gateways/factories/payment-ga
 import { PaymentMethod } from 'src/orders/entities/order.entity';
 import { User } from 'src/users/entities/user.entity';
 import { UserRole } from 'src/users/user-role.enum';
+import { MailserviceService } from 'src/mailservice/mailservice.service';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class SellerService {
+  private readonly logger = new Logger(SellerService.name);
+
   constructor(
     @InjectRepository(SellerProfile)
     private readonly sellerRepo: Repository<SellerProfile>,
@@ -32,14 +36,15 @@ export class SellerService {
 
     private readonly gatewayFactory: PaymentGatewayFactory,
 
-
     @InjectRepository(OrderItem) private orderItemRepo: Repository<OrderItem>,
     @InjectRepository(UserActivity) private activityRepo: Repository<UserActivity>,
 
     private readonly paystackService: PaystackService,
+    private readonly mailService: MailserviceService,
     private dataSource: DataSource
 
   ) { }
+
 
 
 
@@ -95,8 +100,9 @@ export class SellerService {
 
   /* ---------------- CREATE ---------------- */
   async create(userId: string, dto: CreateSellerDto) {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const sellerRepo = manager.getRepository(SellerProfile);
+
       const walletRepo = manager.getRepository(Wallet);
 
       const exists = await sellerRepo.findOne({
@@ -139,9 +145,30 @@ export class SellerService {
       // ✅ Update user role to SELLER
       await manager.getRepository(User).update(userId, { role: UserRole.SELLER });
 
-      return seller;
+      const user = await manager.getRepository(User).findOne({ where: { id: userId } });
+
+      return { seller, user };
     });
+
+    // Send confirmation email asynchronously
+    if (result?.user?.email) {
+      try {
+        await this.mailService.sendSellerProfileSetupEmail(
+          result.user.email,
+          result.user.fullName || result.seller.businessName,
+          result.seller.businessName,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `Failed to send seller profile setup email to ${result.user.email}`,
+          err.stack,
+        );
+      }
+    }
+
+    return result.seller;
   }
+
 
 
   /* ---------------- UPDATE ---------------- */

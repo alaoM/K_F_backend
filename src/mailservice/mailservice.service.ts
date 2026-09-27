@@ -1,9 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as handlebars from 'handlebars';
+import { EmailJobPayload } from './email.processor';
 
 @Injectable()
 export class MailserviceService {
@@ -14,7 +17,10 @@ export class MailserviceService {
   private readonly fromAddress: string;
   private readonly fromName = 'FKstores Support';
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() @InjectQueue('email-queue') private readonly emailQueue?: Queue<EmailJobPayload>,
+  ) {
     this.apiUrl = this.config.get<string>('ZEPTOMAIL_API_URL') ?? 'https://api.zeptomail.com/v1.1/email';
     // .trim() guards against dotenv including surrounding whitespace or newlines
     this.apiKey = (this.config.get<string>('ZEPTOMAIL_API_KEY') ?? '').trim();
@@ -34,10 +40,41 @@ export class MailserviceService {
   }
 
   /**
-   * Sends an email via ZeptoMail REST API.
-   * @see https://www.zoho.com/zeptomail/help/api/email-sending.html
+   * Main send entry point:
+   * 1. Queues the email job into BullMQ (Redis) for high-throughput, rate-limited, auto-retrying background delivery.
+   * 2. If Redis/Queue is unavailable or offline, gracefully falls back to direct HTTP delivery.
    */
   private async send(params: {
+    to: string;
+    toName?: string;
+    subject: string;
+    html: string;
+  }): Promise<void> {
+    if (this.emailQueue) {
+      try {
+        await this.emailQueue.add('send-email', params, {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 5000, // 5s, 10s, 20s
+          },
+        });
+        this.logger.log(`Enqueued email job for ${params.to} — "${params.subject}"`);
+        return;
+      } catch (queueErr: any) {
+        this.logger.warn(
+          `Redis email queue unavailable (${queueErr.message}). Falling back to direct HTTP delivery.`,
+        );
+      }
+    }
+
+    await this.sendDirect(params);
+  }
+
+  /**
+   * Direct HTTP delivery via ZeptoMail REST API (fallback / standalone).
+   */
+  async sendDirect(params: {
     to: string;
     toName?: string;
     subject: string;
@@ -68,10 +105,10 @@ export class MailserviceService {
           // ZeptoMail expects the full string: "Zoho-enczapikey <token>"
           Authorization: this.apiKey,
         },
+        timeout: 15000,
       });
-      this.logger.log(`Email sent to ${params.to} — "${params.subject}"`);
+      this.logger.log(`Direct email sent to ${params.to} — "${params.subject}"`);
     } catch (error: any) {
-      // Log the full ZeptoMail response body for easier diagnosis
       const status = error?.response?.status;
       const body = error?.response?.data;
       this.logger.error(
@@ -82,6 +119,7 @@ export class MailserviceService {
       throw error;
     }
   }
+
 
   // ─── Public methods ─────────────────────────────────────────────────────────
 
@@ -181,6 +219,22 @@ export class MailserviceService {
     });
   }
 
+  async sendSellerProfileSetupEmail(email: string, name: string, businessName: string): Promise<void> {
+    const dashboardUrl = `${this.config.get('FRONTEND_URL') ?? 'https://fkstores.com'}/dashboard/seller`;
+    const html = this.renderTemplate('seller-profile-setup', {
+      name,
+      businessName,
+      dashboardUrl,
+      year: new Date().getFullYear(),
+    });
+    await this.send({
+      to: email,
+      toName: name,
+      subject: `Seller Application Received: ${businessName} — FKstores`,
+      html,
+    });
+  }
+
   async sendSellerApprovalEmail(email: string, name: string): Promise<void> {
     const loginUrl = `${this.config.get('FRONTEND_URL') ?? 'https://fkstores.com'}/login`;
     const html = this.renderTemplate('seller-approval', {
@@ -212,3 +266,4 @@ export class MailserviceService {
     });
   }
 }
+
