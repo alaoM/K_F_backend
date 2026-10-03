@@ -1,10 +1,12 @@
-// src/products/products.service.ts
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -42,6 +44,8 @@ export class ProductsService {
 
     private readonly trackingService: TrackingService,
 
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
   ) { }
 
   /* ================= PUBLIC ================= */
@@ -77,7 +81,7 @@ export class ProductsService {
     return qb.getMany();
   }
 
-  async findOnePublic(id: string) {
+  async findOnePublic(id: string, context?: { clientIp?: string; userId?: string | null }) {
     const product = await this.productRepo.findOne({
       where: { id, status: ProductStatus.PUBLISHED },
       relations: ['seller', 'variants', 'category'],
@@ -87,9 +91,23 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    // Increment views (fire and forget)
-    this.productRepo.increment({ id: product.id }, 'views', 1);
-    this.trackingService.track(null, product.id, ActivityType.VIEW);
+    // 🛡️ De-duplicate views (1 view per user / IP per 2 hours)
+    const identifier = context?.userId || context?.clientIp || 'unknown-client';
+    const viewCacheKey = `product_view:${product.id}:${identifier}`;
+
+    try {
+      const alreadyViewed = await this.cacheManager.get(viewCacheKey);
+
+      if (!alreadyViewed) {
+        // Cache for 2 hours (7,200,000 ms)
+        await this.cacheManager.set(viewCacheKey, true, 2 * 60 * 60 * 1000);
+        await this.productRepo.increment({ id: product.id }, 'views', 1);
+        this.trackingService.track(context?.userId || null, product.id, ActivityType.VIEW);
+        product.views = (product.views || 0) + 1;
+      }
+    } catch (e) {
+      // Fallback gracefully if cache has transient issues
+    }
 
     return product;
   }

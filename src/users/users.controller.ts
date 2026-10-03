@@ -71,6 +71,22 @@ async getMe(@Req() req: any) {
     };
   }
 
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  async deleteUser(
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Req() req: any,
+  ) {
+    const adminId = req.user.sub;
+
+    await this.usersService.remove(id, adminId, reason);
+
+    return {
+      message: 'User soft-deleted successfully',
+    };
+  }
+
   @Patch(':id/restore')
   @Roles(UserRole.ADMIN)
   async restore(

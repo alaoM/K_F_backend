@@ -4,12 +4,25 @@ import { PaymentMethod } from '../entities/order.entity';
 
 class CartItemDto {
   @IsNotEmpty()
+  @IsString()
   productId: string;
 
- @IsNumber()
-@IsPositive()
-@IsInt()
-quantity: number;
+  @IsOptional()
+  @IsString()
+  variantId?: string;
+
+  @IsOptional()
+  @IsString()
+  selectedColor?: string;
+
+  @IsOptional()
+  @IsString()
+  selectedSize?: string;
+
+  @IsNumber()
+  @IsPositive()
+  @IsInt()
+  quantity: number;
 }
 
 export class CreateOrderDto {

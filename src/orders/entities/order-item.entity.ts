@@ -58,4 +58,13 @@ export class OrderItem {
 
   @Column({ type: 'decimal', precision: 5, scale: 4, nullable: true })
   commissionRate: number | null;
+
+  @Column({ nullable: true })
+  variantSnapshotSku: string;
+
+  @Column({ nullable: true })
+  variantSnapshotColor: string;
+
+  @Column({ nullable: true })
+  variantSnapshotSize: string;
 }

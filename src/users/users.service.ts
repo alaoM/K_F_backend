@@ -109,7 +109,7 @@ export class UsersService {
     role?: UserRole,
     status?: string,
   ) {
-    const query = this.userRepo.createQueryBuilder('user');
+    const query = this.userRepo.createQueryBuilder('user').withDeleted();
 
     query.select([
       'user.id',
@@ -118,6 +118,7 @@ export class UsersService {
       'user.role',
       'user.createdAt',
       'user.phoneNumber',
+      'user.businessName',
       'user.lifetimeSalesVolume',
       'user.location',
       'user.isEmailVerified',
@@ -126,7 +127,10 @@ export class UsersService {
       'user.isTwoFactorEnabled',
       'user.status',
       'user.isSuspended',
-      'user.deletedAt'
+      'user.deletedAt',
+      'user.deletedBy',
+      'user.deleteReason',
+      'user.restoredBy',
     ]);
 
     if (search) {
@@ -142,7 +146,15 @@ export class UsersService {
     }
 
     if (status) {
-      query.andWhere('user.status = :status', { status });
+      if (status === 'deleted') {
+        query.andWhere('user.deletedAt IS NOT NULL');
+      } else if (status === 'active') {
+        query.andWhere('(user.status = :status OR (user.status IS NULL AND user.isSuspended = false)) AND user.deletedAt IS NULL', { status: 'active' });
+      } else if (status === 'suspended') {
+        query.andWhere('(user.status = :status OR user.isSuspended = true) AND user.deletedAt IS NULL', { status: 'suspended' });
+      } else {
+        query.andWhere('user.status = :status', { status });
+      }
     }
 
     query
@@ -260,11 +272,13 @@ async remove(
   user.deletedAt = new Date();
   user.deletedBy = adminId;
   user.deleteReason = reason ?? null;
+  user.status = 'deleted';
+  user.isSuspended = true;
 
   await this.userRepo.save(user);
 }
 
-async restoreUser(userId: string, adminId:string): Promise<void> {
+async restoreUser(userId: string, adminId: string): Promise<void> {
   const user = await this.userRepo.findOne({
     where: { id: userId },
     withDeleted: true,
@@ -277,7 +291,9 @@ async restoreUser(userId: string, adminId:string): Promise<void> {
   user.deletedAt = null;
   user.deletedBy = null;
   user.deleteReason = null;
-  user.restoredBy = adminId
+  user.restoredBy = adminId;
+  user.status = 'active';
+  user.isSuspended = false;
 
   await this.userRepo.save(user);
 }
@@ -300,7 +316,7 @@ async restoreUser(userId: string, adminId:string): Promise<void> {
   });
 }
 
-async activateUser(id: string) {
+  async activateUser(id: string) {
   return this.userRepo.update(id, {
     isSuspended: false,
     status: 'active',
@@ -310,13 +326,13 @@ async activateUser(id: string) {
 async getVerificationQueue() {
     return this.userRepo.find({
         where: {
-            /*  role: In([UserRole.SELLER, UserRole.CREATOR]),  */
-             role:  UserRole.SELLER,  // Only show Sellers for now
-            isOnboarded: true,   // Must have filled farm info
-            isVerified: false,   // Not yet approved
-            isSuspended: false
+            role: UserRole.SELLER,
+            isOnboarded: true,
+            isVerified: false,
+            isSuspended: false,
         },
-        order: { createdAt: 'ASC' } 
+        relations: ['sellerProfile', 'sellerProfile.banks'],
+        order: { createdAt: 'ASC' },
     });
 }
 

@@ -117,27 +117,22 @@ export class User {
   pushNotificationsEnabled: boolean;
 
   @Column({ type: 'varchar', default: 'active' })
-  status: 'active' | 'pending' | 'suspended' | 'rejected';
+  status: 'active' | 'pending' | 'suspended' | 'rejected' | 'deleted';
 
   @Index()
   @Column({ type: 'timestamp', nullable: true })
-  @Exclude({ toPlainOnly: true })
   deletedAt: Date | null;
 
   @Column({ type: 'uuid', nullable: true })
-  @Exclude({ toPlainOnly: true })
   deletedBy: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  @Exclude({ toPlainOnly: true })
   restoredBy: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  @Exclude({ toPlainOnly: true })
   deleteReason?: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  @Exclude({ toPlainOnly: true })
   rejectionReason?: string | null;
   /* ================== META ================== */
 

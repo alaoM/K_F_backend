@@ -82,8 +82,16 @@ export class ProductController {
 
 
   @Get(':id')
-  getOnePublicProduct(@Param('id') id: string) {
-    return this.productsService.findOnePublic(id);
+  getOnePublicProduct(@Req() req: any, @Param('id') id: string) {
+    const clientIp =
+      req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
+      req.headers['x-client-ip']?.toString() ||
+      req.ip ||
+      req.socket?.remoteAddress ||
+      'unknown-ip';
+
+    const userId = req.user?.sub || req.user?.id || null;
+    return this.productsService.findOnePublic(id, { clientIp, userId });
   }
  
 }

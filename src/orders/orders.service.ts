@@ -5,6 +5,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Order, PaymentMethod } from './entities/order.entity';
 import { FulfillmentStatus, OrderItem } from './entities/order-item.entity';
 import { Product } from 'src/products/entities/product.entity';
+import { ProductVariant } from 'src/products/entities/product-variant.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from './orders.enum';
 import { User } from 'src/users/entities/user.entity';
@@ -70,10 +71,47 @@ export class OrdersService {
           lock: { mode: 'pessimistic_write' },
         });
 
-        if (!product || product.stock < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for ${product?.title}`
-          );
+        if (!product) {
+          throw new BadRequestException('Product not found');
+        }
+
+        // ✅ Check base product stock if no variant or variant stock if variant exists
+        let effectivePrice = Number(product.price);
+        let variant: ProductVariant | null = null;
+
+        if (product.hasVariants) {
+          if (item.variantId) {
+            variant = await queryRunner.manager.findOne(ProductVariant, {
+              where: { id: item.variantId, productId: product.id },
+              lock: { mode: 'pessimistic_write' },
+            });
+          } else if (item.selectedColor || item.selectedSize) {
+            variant = await queryRunner.manager.findOne(ProductVariant, {
+              where: {
+                productId: product.id,
+                ...(item.selectedColor ? { color: item.selectedColor } : {}),
+                ...(item.selectedSize ? { size: item.selectedSize } : {}),
+              },
+              lock: { mode: 'pessimistic_write' },
+            });
+          }
+
+          if (variant) {
+            if (variant.stock < item.quantity) {
+              throw new BadRequestException(
+                `Insufficient stock for ${product.title} (${variant.color || ''} ${variant.size || ''})`,
+              );
+            }
+            if (variant.price !== null && variant.price !== undefined) {
+              effectivePrice = Number(variant.price);
+            }
+            variant.stock -= item.quantity;
+            await queryRunner.manager.save(variant);
+          } else if (product.stock < item.quantity) {
+            throw new BadRequestException(`Insufficient stock for ${product.title}`);
+          }
+        } else if (product.stock < item.quantity) {
+          throw new BadRequestException(`Insufficient stock for ${product.title}`);
         }
 
         // ✅ Resolve commission: category → parent category → global
@@ -81,8 +119,8 @@ export class OrdersService {
           product.category ?? null
         );
 
-        const itemPrice = Number(product.price);
-        const itemTotal = itemPrice * item.quantity;
+        // ✅ Commission is accurately calculated on the effective variant price!
+        const itemTotal = effectivePrice * item.quantity;
         const itemCommission = itemTotal * commissionRate;
 
         subtotal += itemTotal;
@@ -91,13 +129,18 @@ export class OrdersService {
         const orderItem = new OrderItem();
         orderItem.product = product;
         orderItem.quantity = item.quantity;
-        orderItem.priceAtPurchase = itemPrice;
+        orderItem.priceAtPurchase = effectivePrice;
         orderItem.commissionRate = commissionRate; // ✅ Snapshot at order time
         orderItem.seller = product.seller;
         orderItem.productSnapshotTitle = product.title;
-        orderItem.productSnapshotImage = product.primaryImage;
+        orderItem.productSnapshotImage = (variant && variant.image) || product.primaryImage;
         orderItem.typeSnapshot = product.type;
         orderItem.productSnapshotCategory = product.category?.name ?? null;
+        if (variant) {
+          orderItem.variantSnapshotSku = variant.sku;
+          orderItem.variantSnapshotColor = variant.color;
+          orderItem.variantSnapshotSize = variant.size;
+        }
 
         orderItems.push(orderItem);
 
