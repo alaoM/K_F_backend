@@ -116,6 +116,7 @@ export class ProductsService {
     const qb = this.productRepo
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category') // Join category for names
+      .leftJoinAndSelect('product.variants', 'variants') // Join variants for sizes/colors/stock
       .innerJoin('product.seller', 'seller')
       .where('seller.id = :sellerId', { sellerId: seller.id })
 
@@ -144,8 +145,6 @@ export class ProductsService {
     qb.take(limit).skip(offset);
 
     const [data, total] = await qb.getManyAndCount();
-
-
 
     return {
       data,
@@ -193,7 +192,6 @@ export class ProductsService {
     if (!category) {
       throw new BadRequestException('Invalid category');
     }
-
 
     const { variants, ...productData } = dto;
 
@@ -245,25 +243,11 @@ export class ProductsService {
       throw new ForbiddenException(isAdmin ? 'Product not found' : 'You do not own this product');
     }
 
-    // 1. Identify if the user is trying to change content (title, price, etc.)
-    // We filter out 'status' to see if any other keys exist in the DTO
-    const updateKeys = Object.keys(dto);
-    const isEditingContent = updateKeys.some(key => key !== 'status');
-
-    // 2. Block content edits IF the current status is published
-    if (isEditingContent && product.status === ProductStatus.PUBLISHED) {
-      throw new ForbiddenException(
-        'Please unpublish (draft) the product before editing its details.',
-      );
-    }
-
-    // 3. Handle Category Relation explicitly to avoid TypeORM 'null' errors
-    // DTO has both 'category' and 'categoryId', we'll handle both
+    // 1. Handle Category Relation explicitly to avoid TypeORM 'null' errors
     const { categoryId, category, variants, ...otherFields } = dto;
     const targetCategoryId = categoryId || category;
 
     if (targetCategoryId) {
-      // This ensures the foreign key is set correctly without wiping the relation
       product.category = { id: targetCategoryId } as any;
     }
 
