@@ -3,6 +3,7 @@ import { ProductsService } from './products.service';
 import { ProductController } from './products.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
+import { ProductVariant } from './entities/product-variant.entity';
 import { Category } from 'src/categories/entities/category.entity';
 import { SellerProfile } from 'src/seller/entities/seller-profile.entity';
 import { UsersModule } from 'src/users/users.module';
@@ -13,7 +14,7 @@ import { User } from 'src/users/entities/user.entity';
 @Module({
 
   imports: [
-    TypeOrmModule.forFeature([Product, Category, SellerProfile, User,]), 
+    TypeOrmModule.forFeature([Product, ProductVariant, Category, SellerProfile, User]), 
     UsersModule,
     TrackingModule,
   ],

@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
+import { ProductVariant } from './entities/product-variant.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductFilterDto } from './dto/product-filter.dto';
@@ -26,6 +27,9 @@ export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepo: Repository<Product>,
+
+    @InjectRepository(ProductVariant)
+    private readonly variantRepo: Repository<ProductVariant>,
 
     @InjectRepository(SellerProfile)
     private readonly sellerRepo: Repository<SellerProfile>,
@@ -76,7 +80,7 @@ export class ProductsService {
   async findOnePublic(id: string) {
     const product = await this.productRepo.findOne({
       where: { id, status: ProductStatus.PUBLISHED },
-      relations: ['seller'],
+      relations: ['seller', 'variants', 'category'],
     });
 
     if (!product) {
@@ -159,11 +163,12 @@ export class ProductsService {
     let product;
 
     if (isAdmin) {
-      product = await this.productRepo.findOne({ where: { id: productId } });
+      product = await this.productRepo.findOne({ where: { id: productId }, relations: ['variants', 'category'] });
     } else {
       const seller = await this.getSellerByUser(userId);
       product = await this.productRepo.findOne({
         where: { id: productId, seller: { id: seller.id } },
+        relations: ['variants', 'category'],
       });
     }
 
@@ -190,12 +195,31 @@ export class ProductsService {
     }
 
 
+    const { variants, ...productData } = dto;
+
     const product = this.productRepo.create({
-      ...dto,
+      ...productData,
       seller,
       status: ProductStatus.DRAFT,
-      category
+      category,
+      hasVariants: Boolean(dto.hasVariants && variants && variants.length > 0),
     });
+
+    if (dto.hasVariants && variants && variants.length > 0) {
+      product.stock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+      product.variants = variants.map((v) =>
+        this.variantRepo.create({
+          sku: v.sku,
+          color: v.color,
+          colorHex: v.colorHex,
+          size: v.size,
+          stock: Number(v.stock) || 0,
+          price: v.price !== undefined && v.price !== null ? Number(v.price) : undefined,
+          image: v.image,
+          attributes: v.attributes,
+        }),
+      );
+    }
 
     return this.productRepo.save(product);
   }
@@ -208,11 +232,12 @@ export class ProductsService {
     let product;
 
     if (isAdmin) {
-      product = await this.productRepo.findOne({ where: { id: productId } });
+      product = await this.productRepo.findOne({ where: { id: productId }, relations: ['variants'] });
     } else {
       const seller = await this.getSellerByUser(userId);
       product = await this.productRepo.findOne({
         where: { id: productId, seller: { id: seller.id } },
+        relations: ['variants'],
       });
     }
 
@@ -234,7 +259,7 @@ export class ProductsService {
 
     // 3. Handle Category Relation explicitly to avoid TypeORM 'null' errors
     // DTO has both 'category' and 'categoryId', we'll handle both
-    const { categoryId, category, ...otherFields } = dto;
+    const { categoryId, category, variants, ...otherFields } = dto;
     const targetCategoryId = categoryId || category;
 
     if (targetCategoryId) {
@@ -247,6 +272,32 @@ export class ProductsService {
 
     if (dto.status) {
       product.status = dto.status;
+    }
+
+    // 5. Handle variants synchronization
+    if (dto.hasVariants !== undefined) {
+      product.hasVariants = Boolean(dto.hasVariants);
+    }
+
+    if (dto.hasVariants && Array.isArray(variants)) {
+      await this.variantRepo.delete({ productId: product.id });
+      product.stock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+      product.variants = variants.map((v) =>
+        this.variantRepo.create({
+          productId: product.id,
+          sku: v.sku,
+          color: v.color,
+          colorHex: v.colorHex,
+          size: v.size,
+          stock: Number(v.stock) || 0,
+          price: v.price !== undefined && v.price !== null ? Number(v.price) : undefined,
+          image: v.image,
+          attributes: v.attributes,
+        }),
+      );
+    } else if (dto.hasVariants === false) {
+      await this.variantRepo.delete({ productId: product.id });
+      product.variants = [];
     }
 
     return this.productRepo.save(product);

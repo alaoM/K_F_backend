@@ -60,4 +60,25 @@ export class CreateProductDto {
   @IsOptional()
   @IsObject()
   attributes?: Record<string, any>; // For specs like "Weight", "Color", etc.
+
+  @IsOptional()
+  @IsBoolean()
+  hasVariants?: boolean;
+
+  @IsOptional()
+  variantOptions?: { colors?: string[]; sizes?: string[]; custom?: Record<string, string[]> };
+
+  @IsOptional()
+  @IsArray()
+  variants?: Array<{
+    id?: string;
+    sku?: string;
+    color?: string;
+    colorHex?: string;
+    size?: string;
+    stock: number;
+    price?: number;
+    image?: string;
+    attributes?: Record<string, any>;
+  }>;
 }

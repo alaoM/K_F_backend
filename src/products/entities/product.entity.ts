@@ -4,6 +4,7 @@ import { ProductStatus } from "../enum/product-status.enum";
 import { Category } from "src/categories/entities/category.entity";
 import { SellerProfile } from "src/seller/entities/seller-profile.entity";
 import { Review } from "src/reviews/entities/review.entity";
+import { ProductVariant } from "./product-variant.entity";
 
 
 export class ColumnNumericTransformer {
@@ -67,6 +68,15 @@ export class Product {
     // Flexible Attributes (Weight: 2kg, Origin: Kenya, etc.)
     @Column({ type: 'json', nullable: true })
     attributes: Record<string, any>;
+
+    @Column({ default: false })
+    hasVariants: boolean;
+
+    @Column({ type: 'json', nullable: true })
+    variantOptions: { colors?: string[]; sizes?: string[]; custom?: Record<string, string[]> };
+
+    @OneToMany(() => ProductVariant, (variant) => variant.product, { cascade: true, eager: true })
+    variants: ProductVariant[];
 
     @Column({ type: 'enum', enum: ProductStatus, default: ProductStatus.PUBLISHED })
     status: ProductStatus;
